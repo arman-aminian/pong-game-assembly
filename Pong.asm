@@ -1,0 +1,958 @@
+.MODEL SMALL
+.STACK 64   
+
+.DATA
+	WIDTH_SIZE	DW	140H
+	HEIGHT_SIZE	DW	0C8H
+    TIME_AUX    DB  0H
+    BALL_X  DW  20H
+    BALL_Y  DW  20H
+	BALL_SIZE  DW  09H	
+	BALL_VELOCITY_X	DW	04H
+	BALL_VELOCITY_Y	DW	03H
+	BALL_COLOR		DB	0FH
+	BALL_RADIUS		DW	04H
+	BALL_CENTER_X	DW	24H
+	BALL_CENTER_Y	DW	24H
+	
+	X_BOUND	DW 05H
+	Y_BOUND DW 04H
+	
+	BORDER_LEFT DW  20
+	BORDER_RIGHT DW  270
+	BORDER_TOP    DW  20
+	BORDER_BOTTOM    DW  160
+	
+	;PADDLE_X		DW	
+	PADDLE_Y		DW	50
+	PADDLE_WIDTH	DW	02
+	PADDLE_HEIGHT	DW	30
+	PADDLE_MOVEMENT_SIZE	DW	06H
+
+	MY_SCORE		DW	1H
+	
+	MSG1 DB "HELLO WORLD$"
+	MSG_END_GAME	DB	"YOU WIN!$"
+	MSG_GAME_OVER	DB	"GAME OVER.$"
+	BLANK DB "           $"
+	SCORE DB "SCORE:      $"
+	
+	BLOCK_START_X	DB	8
+	BLOCK_START_Y	DB	8	
+	BLOCK_X			DW	63
+	BLOCK_Y			dw	63
+	BLOCK_INDEX_X	DB	0
+	BLOCK_INDEX_Y	DB	0
+	BLOCK_HP		DB	'5'
+	BLOCK_COLOR     DB  6
+	BLOCK_SIZE		DW	12
+	
+.CODE 
+#start=led_display.exe#
+
+
+;#make_bin#
+	MAIN PROC FAR
+	    
+		
+		MOV AX, @DATA
+		MOV DS, AX    
+		
+		;set mode
+		MOV AH, 00H
+		MOV AL, 13H
+		INT	10H
+		
+		;hello world
+		MOV AH,02H
+        MOV BH,00
+        MOV DX,050CH
+        INT 10H
+
+        MOV AH,09H
+        LEA DX,MSG1
+        INT 21H
+        
+        MOV BX,01H
+        WAIT:
+        
+        ; set 1 million microseconds interval (1 second)
+        mov     cx, 0fh
+        mov     dx, 4240h
+        mov     ah, 86h
+        int     15h
+    
+        dec BX
+        cmp BX,0
+        jnz wait
+        
+        
+        MOV AH,02H
+        MOV BH,00
+        MOV DX,050CH
+        INT 10H
+
+        MOV AH,09H
+        LEA DX,BLANK
+        INT 21H
+		
+		;clear screen
+		;MOV AX,0600H
+        ;MOV BH,71H
+        ;MOV CX,0000H
+        ;MOV DX,184FH
+        ;INT 10H		
+        
+        MOV AX, MY_SCORE
+        CALL SHOW_SCORE
+		CALL INITIAL_BORDERS
+		CALL DRAW_PADDLE
+		CALL DRAW_BLOCK
+		         
+		PUSH    AX
+		PUSH    BX
+		PUSH    CX
+		PUSH    DX
+		CALL GET_RANDOM
+		POP     DX
+		POP     CX
+		POP     BX
+		POP     AX        
+		
+		CHECK:
+		
+		MOV AH, 2CH ;get time
+		INT 21H
+			
+		CMP DL, TIME_AUX
+		JE CHECK
+		
+		MOV TIME_AUX, DL 
+		
+		CALL REMOVE_BALL		
+		CALL UPDATE_BALL
+		CALL DRAW_ROUNDED_BALL
+	
+		CALL UPDATE_PADDLE
+	
+		JMP CHECK
+		
+			
+		RET
+			
+	MAIN ENDP
+	
+	DRAW_BLOCK PROC	NEAR
+		CALL REMOVE_BLOCK
+		
+		CALL GET_BLOCK_COLOR_RANDOM
+		
+		MOV	BLOCK_HP, '5'
+		CALL GET_RANDOM_BLOCK_X_INDEX
+		CALL GET_RANDOM_BLOCK_Y_INDEX
+		
+		MOV DL, BLOCK_START_X
+		ADD DL, BLOCK_INDEX_X
+		MOV DH, BLOCK_START_Y
+		ADD DH, BLOCK_INDEX_Y
+		MOV AX, 08H
+		MUL DL
+		DEC AX
+		SUB AX, 2 ;for bigger block
+		MOV BLOCK_X, AX
+		MOV AX, 08H
+		MUL DH
+		DEC AX
+		SUB AX, 2 ;for bigger block
+		MOV BLOCK_Y, AX
+		
+		MOV CX, BLOCK_X
+		MOV DX, BLOCK_Y
+		DRAW_BLOCK_COLUMN:
+			DRAW_BLOCK_LINE:
+				MOV AH, 0CH
+				;CALL GET_RANDOM
+				MOV AL, BLOCK_COLOR
+				MOV BH, 00H
+				INT 10H	
+
+				INC	CX
+				MOV AX, CX
+				SUB AX, BLOCK_X
+				CMP AX, 0CH
+				JNG	DRAW_BLOCK_LINE
+			
+			MOV CX, BLOCK_X
+			INC DX
+			MOV AX, DX
+			SUB AX, BLOCK_Y
+			CMP AX, 0CH
+			JNG	DRAW_BLOCK_COLUMN
+		
+		MOV AH,02H
+        MOV BH,00
+		MOV DL, BLOCK_START_X
+		ADD DL, BLOCK_INDEX_X
+		MOV DH, BLOCK_START_Y
+		ADD DH, BLOCK_INDEX_Y
+        ;MOV DX,0202H
+        INT 10H      
+		MOV AH,02H
+        MOV Dl,BLOCK_HP
+        INT 21H
+		
+		RET
+		
+	UPDATE_BLOCK PROC	NEAR
+		CALL REMOVE_BLOCK
+		
+		MOV CX, BLOCK_X
+		MOV DX, BLOCK_Y
+		UPDATE_BLOCK_COLUMN:
+			UPDATE_BLOCK_LINE:
+				MOV AH, 0CH
+				;CALL GET_RANDOM
+				MOV AL, BLOCK_COLOR
+				MOV BH, 00H
+				INT 10H	
+
+				INC	CX
+				MOV AX, CX
+				SUB AX, BLOCK_X
+				CMP AX, 0CH
+				JNG	UPDATE_BLOCK_LINE
+			
+			MOV CX, BLOCK_X
+			INC DX
+			MOV AX, DX
+			SUB AX, BLOCK_Y
+			CMP AX, 0CH
+			JNG	UPDATE_BLOCK_COLUMN
+		
+		MOV AH,02H
+        MOV BH,00
+		MOV DL, BLOCK_START_X
+		ADD DL, BLOCK_INDEX_X
+		MOV DH, BLOCK_START_Y
+		ADD DH, BLOCK_INDEX_Y
+        ;MOV DX,0202H
+        INT 10H      
+		MOV AH,02H
+        MOV Dl,BLOCK_HP
+        INT 21H
+		
+		RET
+		
+	REMOVE_BLOCK PROC	NEAR
+		
+		MOV CX, BLOCK_X
+		MOV DX, BLOCK_Y
+		REMOVE_BLOCK_COLUMN:
+			REMOVE_BLOCK_LINE:
+				MOV AH, 0CH
+				;CALL GET_RANDOM
+				MOV AL, 00H
+				MOV BH, 00H
+				INT 10H	
+
+				INC	CX
+				MOV AX, CX
+				SUB AX, BLOCK_X
+				CMP AX, 0CH
+				JNG	REMOVE_BLOCK_LINE
+			
+			MOV CX, BLOCK_X
+			INC DX
+			MOV AX, DX
+			SUB AX, BLOCK_Y
+			CMP AX, 0CH
+			JNG	REMOVE_BLOCK_COLUMN
+		
+		RET	
+        
+    SHOW_SCORE PROC NEAR
+        PUSH AX
+        MOV AX, MY_SCORE
+        OUT 199, AX
+        POP AX
+        LEA SI, SCORE
+        ADD SI, 5 
+        MOV CX,0 
+        MOV DX,0 
+        label1: 
+            CMP AX,0 
+            JE print1       
+          
+            MOV BX,10         
+            DIV BX                
+            PUSH DX             
+            INC CX               
+                          
+            XOR DX,DX 
+            JMP label1
+            print1:
+             
+            CMP CX,0 
+            JE exit
+              
+            POP DX           
+            ADD DX,48 
+            
+            ADD SI, 1
+    		MOV [SI], DX
+    		;show score
+    		MOV AH,02H
+            MOV BH,00
+            MOV DX,0105H
+            INT 10H
+            MOV AH,09H
+            LEA DX,SCORE
+            INT 21H
+            
+                         
+            DEC CX 
+            JMP print1 
+    exit:
+	RET
+
+    
+	
+	INITIAL_BORDERS PROC NEAR
+	   MOV CX,BORDER_TOP
+	   MOV DX,BORDER_LEFT
+	   TOP_BORDER_BACK:
+	       MOV AH,0CH
+	       MOV AL,0CH
+           INT 10H
+           INC CX
+           CMP CX,BORDER_RIGHT
+           JNZ TOP_BORDER_BACK
+       
+       
+       MOV CX,BORDER_TOP
+	   MOV DX,BORDER_LEFT
+	   LEFT_BORDER_BACK:
+	       MOV AH,0CH
+	       MOV AL,0CH
+           INT 10H
+           INC DX
+           CMP DX,BORDER_BOTTOM
+           JNZ LEFT_BORDER_BACK
+           
+           
+       MOV CX,BORDER_LEFT
+	   MOV DX,BORDER_BOTTOM
+	   BOTTOM_BORDER_BACK:
+	       MOV AH,0CH
+	       MOV AL,0CH
+           INT 10H
+           INC CX
+           CMP CX,BORDER_RIGHT
+           JNZ BOTTOM_BORDER_BACK
+        
+        
+       RET 
+	
+	UPDATE_BALL PROC NEAR
+		MOV	AX, BALL_VELOCITY_X
+		ADD BALL_X, AX
+		
+		MOV AX, X_BOUND
+		ADD	AX, BORDER_LEFT
+		CMP BALL_X, AX
+		JL CRASHED_X
+		
+		MOV AX, BORDER_RIGHT
+		SUB AX, BALL_SIZE
+		SUB AX, X_BOUND
+		CMP BALL_X, AX
+		JG CRASHED_RIGHT_X
+		
+		
+		MOV	AX, BALL_VELOCITY_Y
+		ADD BALL_Y, AX
+		
+		MOV AX, Y_BOUND
+		ADD	AX, BORDER_TOP
+		CMP BALL_Y, AX
+		JL CRASHED_Y
+		
+		MOV AX, BORDER_BOTTOM
+		SUB AX, BALL_SIZE
+		SUB AX, Y_BOUND
+		CMP BALL_Y, AX
+		JG CRASHED_Y
+		
+		MOV AX, BALL_X
+		CMP AX, BLOCK_X
+		JL EXIT_BLOCKING1
+		MOV BX, BLOCK_X
+		ADD BX, BLOCK_SIZE
+		CMP AX, BX
+		JG EXIT_BLOCKING1
+		MOV CX, BALL_Y
+		CMP CX, BLOCK_Y
+		JL EXIT_BLOCKING1
+		MOV BX, BLOCK_Y
+		ADD BX, BLOCK_SIZE
+		CMP CX, BX
+		JG EXIT_BLOCKING1
+		JMP BALL_BLOCKED
+		
+		EXIT_BLOCKING1:
+		MOV AX, BALL_X
+		ADD AX, BALL_SIZE
+		CMP AX, BLOCK_X
+		JL EXIT_BLOCKING2
+		MOV BX, BLOCK_X
+		ADD BX, BLOCK_SIZE
+		CMP AX, BX
+		JG EXIT_BLOCKING2
+		MOV CX, BALL_Y
+		CMP CX, BLOCK_Y
+		JL EXIT_BLOCKING2
+		MOV BX, BLOCK_Y
+		ADD BX, BLOCK_SIZE
+		CMP CX, BX
+		JG EXIT_BLOCKING2
+		JMP BALL_BLOCKED
+		
+		EXIT_BLOCKING2:
+		MOV AX, BALL_X
+		CMP AX, BLOCK_X
+		JL EXIT_BLOCKING3
+		MOV BX, BLOCK_X
+		ADD BX, BLOCK_SIZE
+		CMP AX, BX
+		JG EXIT_BLOCKING3
+		MOV CX, BALL_Y
+		ADD	CX, BALL_SIZE
+		CMP CX, BLOCK_Y
+		JL EXIT_BLOCKING3
+		MOV BX, BLOCK_Y
+		ADD BX, BLOCK_SIZE
+		CMP CX, BX
+		JG EXIT_BLOCKING3
+		JMP BALL_BLOCKED
+		
+		EXIT_BLOCKING3:
+		MOV AX, BALL_X
+		ADD	AX, BALL_SIZE
+		CMP AX, BLOCK_X
+		JL EXIT_BLOCKING4
+		MOV BX, BLOCK_X
+		ADD BX, BLOCK_SIZE
+		CMP AX, BX
+		JG EXIT_BLOCKING4
+		MOV CX, BALL_Y
+		ADD CX, BALL_SIZE
+		CMP CX, BLOCK_Y
+		JL EXIT_BLOCKING4
+		MOV BX, BLOCK_Y
+		ADD BX, BLOCK_SIZE
+		CMP CX, BX
+		JG EXIT_BLOCKING4
+		JMP BALL_BLOCKED
+		
+		EXIT_BLOCKING4:
+		RET
+		
+		BALL_BLOCKED:
+			NEG	BALL_VELOCITY_X
+			NEG	BALL_VELOCITY_Y
+			CALL GET_RANDOM
+			DEC BLOCK_HP
+			CMP BLOCK_HP, '0'
+			JG	BLOCK_ALIVE
+			CALL DRAW_BLOCK
+			RET
+			BLOCK_ALIVE:
+			CALL UPDATE_BLOCK
+			RET
+		
+		CRASHED_X:
+		    PUSH    AX
+    		PUSH    BX
+    		PUSH    CX
+    		PUSH    DX
+    		CALL GET_RANDOM
+    		POP     DX
+    		POP     CX
+    		POP     BX
+    		POP     AX
+
+			NEG	BALL_VELOCITY_X
+			RET
+			
+		CRASHED_RIGHT_X:
+		    PUSH    AX
+    		PUSH    BX
+    		PUSH    CX
+    		PUSH    DX
+    		CALL GET_RANDOM
+    		POP     DX
+    		POP     CX
+    		POP     BX
+    		POP     AX
+			MOV	AX, BALL_Y
+			CMP	AX, PADDLE_Y
+			JL	CRASHED_RIGHT_X_GAME_OVER
+			MOV BX, PADDLE_Y
+			ADD	BX, PADDLE_HEIGHT
+			CMP	AX, BX
+			JG	CRASHED_RIGHT_X_GAME_OVER
+			
+			ADD	MY_SCORE, 1H
+			
+			;show new score
+			MOV AX, MY_SCORE
+            CALL SHOW_SCORE
+			
+			MOV AX, MY_SCORE
+			CMP AX, 30
+			JNE ROUND_CON
+			CALL SHOW_END_GAME
+            
+			ROUND_CON:
+			NEG	BALL_VELOCITY_X
+			RET
+			
+			CRASHED_RIGHT_X_GAME_OVER:
+			    
+			    CALL SHOW_GAME_OVER
+			    ;MOV AH, 4CH
+                ;INT 21H
+			    	     
+			RET
+		
+		CRASHED_Y:
+		    PUSH    AX
+    		PUSH    BX
+    		PUSH    CX
+    		PUSH    DX
+    		CALL GET_RANDOM
+    		POP     DX
+    		POP     CX
+    		POP     BX
+    		POP     AX
+			NEG	BALL_VELOCITY_Y
+			RET
+
+	SHOW_END_GAME	PROC	NEAR
+		MOV AH,02H
+        MOV BH,00
+        MOV DX,080CH
+        INT 10H
+
+        MOV AH,09H
+        LEA DX,MSG_END_GAME
+        INT 21H
+        
+        MOV AH, 4CH
+        INT 21H
+		
+		RET
+		
+	SHOW_GAME_OVER	PROC	NEAR
+		MOV AH,02H
+        MOV BH,00
+        MOV DX,080CH
+        INT 10H
+
+        MOV AH,09H
+        LEA DX,MSG_GAME_OVER
+        INT 21H
+        
+        MOV AH, 4CH
+        INT 21H
+        
+		RET
+
+	DRAW_BALL PROC NEAR
+	
+		MOV CX, BALL_X
+		MOV DX, BALL_Y
+		
+
+		DRAW_BALL_COLUMN:
+			DRAW_BALL_LINE:
+				MOV AH, 0CH
+				;CALL GET_RANDOM
+				MOV AL, BALL_COLOR
+				MOV BH, 00H
+				INT 10H	
+
+				INC	CX
+				MOV AX, CX
+				SUB AX, BALL_X
+				CMP AX, BALL_SIZE
+				JNG	DRAW_BALL_LINE
+			
+			MOV CX, BALL_X
+			INC DX
+			MOV AX, DX
+			SUB AX, BALL_Y
+			CMP AX, BALL_SIZE
+			JNG	DRAW_BALL_COLUMN
+	    RET
+		
+	GET_RANDOM	PROC	NEAR
+		MOV AH, 2CH ;get time
+		INT 21H
+		MOV  AX, 0H
+		MOV  AL, DL
+		;MOV  AX, BALL_X
+		XOR  DX, DX
+		MOV  CX, 0FH
+		DIV  CX
+		INC  DL
+		MOV  BALL_COLOR, DL
+	RET
+	
+	GET_BLOCK_COLOR_RANDOM	PROC	NEAR
+		MOV AH, 2CH ;get time
+		INT 21H
+		MOV  AX, 0H
+		MOV  AL, DL
+		;MOV  AX, BALL_X
+		XOR  DX, DX
+		MOV  CX, 0FH
+		DIV  CX
+		INC  DL
+		MOV  BLOCK_COLOR, DL
+	RET
+	
+	GET_RANDOM_BLOCK_X_INDEX	PROC	NEAR
+		MOV AH, 2CH ;get time
+		INT 21H
+		MOV  AX, 0H
+		MOV  AL, DL
+		;MOV  AX, BALL_X
+		XOR  DX, DX
+		MOV  CX, 0BH
+		DIV  CX
+		MOV  BLOCK_INDEX_X, DL
+	RET
+	
+	GET_RANDOM_BLOCK_Y_INDEX	PROC	NEAR
+		MOV AH, 2CH ;get time
+		INT 21H
+		MOV  AX, 0H
+		MOV  AL, DH
+		;MOV  AX, BALL_X
+		XOR  DX, DX
+		MOV  CX, 07H
+		DIV  CX
+		MOV  BLOCK_INDEX_Y, DL
+	RET
+	
+	GET_RANDOM_BLOCK_HP	PROC	NEAR
+		MOV AH, 2CH ;get time
+		INT 21H
+		MOV  AX, 0H
+		MOV  AL, DL
+		;MOV  AX, BALL_X
+		XOR  DX, DX
+		MOV  CX, 05H
+		DIV  CX
+		MOV  BLOCK_HP, DL
+	RET
+
+	DRAW_PADDLE	PROC	NEAR
+		MOV CX, BORDER_RIGHT
+		MOV DX, PADDLE_Y
+		
+		DRAW_PADDLE_COLUMN:
+			DRAW_PADDLE_LINE:
+				MOV AH, 0CH
+				MOV AL, 0FH
+				MOV BH, 00H
+				INT 10H	
+
+				INC	CX
+				MOV AX, CX
+				SUB AX, BORDER_RIGHT
+				CMP AX, PADDLE_WIDTH
+				JNG	DRAW_PADDLE_LINE
+			
+			MOV CX, BORDER_RIGHT
+			INC DX
+			MOV AX, DX
+			SUB AX, PADDLE_Y
+			CMP AX, PADDLE_HEIGHT
+			JNG	DRAW_PADDLE_COLUMN
+		
+		RET
+		
+	UPDATE_PADDLE	PROC	NEAR
+		;check tath any character enterd or not
+		MOV AH, 01H
+		INT 16H
+		JZ	UPDATE_PADDLE_END
+		
+		;ah = entered character
+		MOV	AH, 00H
+		INT 16H
+		
+		CMP AL, 77H
+		JE	PADDLE_UP
+		CMP	AL, 73H
+		JE	PADDLE_DOWN
+		JMP UPDATE_PADDLE_END ;illegal character
+		
+		PADDLE_UP:
+			MOV	AX, PADDLE_MOVEMENT_SIZE
+			ADD AX, BORDER_TOP
+			CMP PADDLE_Y, AX
+			JL	UPDATE_PADDLE_END
+			
+			MOV	AX, PADDLE_MOVEMENT_SIZE
+			SUB	PADDLE_Y, AX
+			
+			MOV CX, BORDER_RIGHT
+			MOV DX, PADDLE_Y			
+			DRAW_PADDLE_UP_COLUMN:
+				DRAW_PADDLE_UP_LINE:
+					MOV AH, 0CH
+					MOV AL, 0FH
+					MOV BH, 00H
+					INT 10H	
+
+					INC	CX
+					MOV AX, CX
+					SUB AX, BORDER_RIGHT
+					CMP AX, PADDLE_WIDTH
+					JNG	DRAW_PADDLE_UP_LINE
+				
+				MOV CX, BORDER_RIGHT
+				INC DX
+				MOV AX, DX
+				SUB AX, PADDLE_Y
+				CMP AX, PADDLE_MOVEMENT_SIZE
+				JNG	DRAW_PADDLE_UP_COLUMN 
+				
+			MOV CX, BORDER_RIGHT
+			MOV DX, PADDLE_Y
+			ADD DX, PADDLE_HEIGHT			
+			REMOVE_PADDLE_UP_COLUMN:
+				REMOVE_PADDLE_UP_LINE:
+					MOV AH, 0CH
+					MOV AL, 00H
+					MOV BH, 00H
+					INT 10H	
+
+					INC	CX
+					MOV AX, CX
+					SUB AX, BORDER_RIGHT
+					CMP AX, PADDLE_WIDTH
+					JNG	REMOVE_PADDLE_UP_LINE
+				
+				MOV CX, BORDER_RIGHT
+				INC DX
+				MOV AX, DX
+				SUB AX, PADDLE_Y
+				SUB AX, PADDLE_HEIGHT
+				CMP AX, PADDLE_MOVEMENT_SIZE
+				JNG	REMOVE_PADDLE_UP_COLUMN
+			JMP UPDATE_PADDLE_END
+		
+
+			
+		PADDLE_DOWN:
+				MOV	CX, BORDER_BOTTOM
+				SUB CX, PADDLE_MOVEMENT_SIZE
+				MOV BX, PADDLE_Y
+				ADD BX, PADDLE_HEIGHT
+				CMP BX, CX
+				JG	UPDATE_PADDLE_END
+				
+				MOV	AX, PADDLE_MOVEMENT_SIZE
+				ADD	PADDLE_Y, AX
+				
+				MOV CX, BORDER_RIGHT
+				MOV DX, PADDLE_Y
+				SUB DX, PADDLE_MOVEMENT_SIZE
+				REMOVE_PADDLE_DOWN_COLUMN:
+					REMOVE_PADDLE_DOWN_LINE:
+						MOV AH, 0CH
+						MOV AL, 00H
+						MOV BH, 00H
+						INT 10H	
+
+						INC	CX
+						MOV AX, CX
+						SUB AX, BORDER_RIGHT
+						CMP AX, PADDLE_WIDTH
+						JNG	REMOVE_PADDLE_DOWN_LINE
+					
+					MOV CX, BORDER_RIGHT
+					INC DX
+					MOV AX, DX
+					SUB AX, PADDLE_Y
+					ADD AX, PADDLE_MOVEMENT_SIZE
+					CMP AX, PADDLE_MOVEMENT_SIZE
+					JNG	REMOVE_PADDLE_DOWN_COLUMN 
+					
+				MOV CX, BORDER_RIGHT
+				MOV DX, PADDLE_Y
+				ADD DX, PADDLE_HEIGHT
+				SUB	DX, PADDLE_MOVEMENT_SIZE
+				DRAW_PADDLE_DOWN_COLUMN:
+					DRAW_PADDLE_DOWN_LINE:
+						MOV AH, 0CH
+						MOV AL, 0FH
+						MOV BH, 00H
+						INT 10H	
+
+						INC	CX
+						MOV AX, CX
+						SUB AX, BORDER_RIGHT
+						CMP AX, PADDLE_WIDTH
+						JNG	DRAW_PADDLE_DOWN_LINE
+					
+					MOV CX, BORDER_RIGHT
+					INC DX
+					MOV AX, DX
+					SUB AX, PADDLE_Y
+					SUB AX, PADDLE_HEIGHT
+					ADD	AX, PADDLE_MOVEMENT_SIZE
+					CMP AX, PADDLE_MOVEMENT_SIZE
+					JNG	DRAW_PADDLE_DOWN_COLUMN
+		
+		
+		UPDATE_PADDLE_END:
+		
+		RET		
+			
+	
+	
+	REMOVE_BALL PROC NEAR
+	
+		MOV CX, BALL_X
+		MOV DX, BALL_Y
+		
+		REMOVE_BALL_COLUMN:
+			REMOVE_BALL_LINE:
+				MOV AH, 0CH
+				MOV AL, 00H
+				MOV BH, 00H
+				INT 10H	
+
+				INC	CX
+				MOV AX, CX
+				SUB AX, BALL_X
+				CMP AX, BALL_SIZE
+				JNG	REMOVE_BALL_LINE
+			
+			MOV CX, BALL_X
+			INC DX
+			MOV AX, DX
+			SUB AX, BALL_Y
+			CMP AX, BALL_SIZE
+			JNG	REMOVE_BALL_COLUMN
+	    RET  
+	
+	
+	DRAW_ROUNDED_BALL PROC NEAR 
+        MOV CX, BALL_X
+		MOV DX, BALL_Y
+		
+		MOV AX, BALL_RADIUS
+		INC AX
+		MOV	BALL_CENTER_X, CX
+		ADD	BALL_CENTER_X, AX
+		
+		MOV	BALL_CENTER_Y, DX
+		ADD	BALL_CENTER_Y, AX
+		
+		;PUSH    AX
+		;PUSH    BX
+		;PUSH    CX
+		;PUSH    DX
+		;CALL GET_RANDOM
+		;POP     DX
+		;POP     CX
+		;POP     BX
+		;POP     AX
+		
+		DRAW_ROUNDED_BALL_COLUMN:
+			DRAW_ROUNDED_BALL_LINE:
+			   
+			    PUSH CX
+			    PUSH DX
+				
+				MOV AX, CX
+			    
+			    ;MOV CX, CENTER_X
+			    SUB CX, BALL_CENTER_X
+			    MOV AX, CX
+			    CMP AX, 0H
+			    JG CON1:
+			    MOV DX, -1
+			    MUL DX
+			    MOV CX, AX
+			    CON1:
+			    MUL CX
+			    MOV BX, AX
+			    
+			    POP DX
+			    PUSH DX
+			   
+			    
+			    ;MOV DX, CENTER_Y
+			    SUB DX, BALL_CENTER_Y
+			    MOV AX, DX
+			    CMP AX, 0H
+			    JG CON2:
+			    MOV CX, -1
+			    MUL CX
+			    MOV DX, AX
+			    CON2:
+			    MUL DX			    
+			    ADD BX, AX
+			   
+			    
+			    ;sqrt start
+			    MOV CX, BX
+			    MOV BX, 01H
+			    
+			    LABEL_SQRT:
+			    MOV AX, BX
+                MUL BX
+                CMP AX, CX
+                JG RES
+                INC BX
+                JMP LABEL_SQRT
+                ;sqrt finish
+                
+                RES:
+                DEC BX
+                
+                POP DX
+			    POP CX
+			    
+			    CMP BX, BALL_RADIUS
+			    JG  LABEL
+			    
+				MOV AH, 0CH
+				MOV AL, BALL_COLOR
+				MOV BH, 00H
+				INT 10H	
+                
+                LABEL:
+				INC	CX
+				MOV AX, CX
+				SUB AX, BALL_X
+				
+				CMP AX, BALL_SIZE
+				JNG	DRAW_ROUNDED_BALL_LINE
+			
+			MOV CX, BALL_X
+			INC DX
+			MOV AX, DX
+			SUB AX, BALL_Y
+			CMP AX, BALL_SIZE
+			JNG	DRAW_ROUNDED_BALL_LINE
+	RET   
+				
+END 
